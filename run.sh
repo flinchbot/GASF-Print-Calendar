@@ -9,10 +9,10 @@
 set -uo pipefail
 
 APP_DIR=/opt/gasf-print-calendar
-OUT="$APP_DIR/calendar.pdf"
+MAIN_PDF="$APP_DIR/calendar.pdf"
 LOG="$APP_DIR/render.log"
 LOCK="/tmp/gasf-print-calendar.lock"
-DEST="gasf-bluehost:public_html/wp-content/uploads/calendar.pdf"
+DEST_DIR="gasf-bluehost:public_html/wp-content/uploads/"
 
 # Cron's PATH is bare; make sure node + chromium resolve.
 export PATH=/usr/local/bin:/usr/bin:/bin:$PATH
@@ -46,15 +46,18 @@ if [ -z "$NODE_BIN" ]; then
 fi
 
 log "START render (node=$NODE_BIN chrome=$CHROME_PATH)"
-if OUT="$OUT" "$NODE_BIN" "$APP_DIR/render.js" >> "$LOG" 2>&1; then
-  SIZE=$(stat -c%s "$OUT" 2>/dev/null || echo 0)
+# Clear last run's PDFs so a partial render can't leave a stale month behind.
+rm -f "$APP_DIR"/calendar.pdf "$APP_DIR"/calendar-*.pdf
+if OUT_DIR="$APP_DIR" "$NODE_BIN" "$APP_DIR/render.js" >> "$LOG" 2>&1; then
+  SIZE=$(stat -c%s "$MAIN_PDF" 2>/dev/null || echo 0)
   if [ "$SIZE" -lt 10000 ]; then
-    log "FAIL: PDF suspiciously small ($SIZE bytes) — keeping previous upload"
+    log "FAIL: current-month PDF small/missing ($SIZE bytes) — not uploading"
     exit 1
   fi
-  log "render OK ($SIZE bytes); uploading"
-  if scp -o ConnectTimeout=30 -o BatchMode=yes "$OUT" "$DEST" >> "$LOG" 2>&1; then
-    log "UPLOAD OK -> $DEST"
+  COUNT=$(ls -1 "$APP_DIR"/calendar*.pdf 2>/dev/null | wc -l)
+  log "render OK ($COUNT files, current=$SIZE bytes); uploading"
+  if scp -o ConnectTimeout=30 -o BatchMode=yes "$APP_DIR"/calendar.pdf "$APP_DIR"/calendar-*.pdf "$DEST_DIR" >> "$LOG" 2>&1; then
+    log "UPLOAD OK ($COUNT files) -> $DEST_DIR"
   else
     log "FAIL: scp upload failed"
     exit 1
