@@ -25,21 +25,35 @@ which is the one thing CSS could not do.
 ## Flow
 
 ```
-cron (4x/day, Eastern)
+cron (hourly, Eastern)
   └─ run.sh                         /opt/gasf-print-calendar  (Jabra box, AlmaLinux 8)
        ├─ render.js  ──► headless Chromium ──► https://germantampabay.com/calendar-of-events/
-       │                  · isolate the .mec-wrap calendar element (drop header/footer/sidebar)
+       │                  for the current month + the next 6:
+       │                  · fetch the month via MEC's load-month AJAX (replayed, then injected)
+       │                  · isolate the calendar element (drop header/footer/sidebar)
        │                  · auto-fit a print `scale` so it fills one landscape page
-       │                  · write calendar.pdf
+       │                  · stamp a footer (org name / website) in the page margin
+       │                  · write calendar-YYYY-MM.pdf  (+ calendar.pdf for the current month)
        └─ scp ──► germanta@box5763.bluehost.com:2222
-                    └─ /home4/germanta/public_html/wp-content/uploads/calendar.pdf
-                         └─ served at https://germantampabay.com/wp-content/uploads/calendar.pdf
-                              └─ linked by WP snippet #22's "🖨 Print Calendar" button (page 8647)
+                    └─ /home4/germanta/public_html/wp-content/uploads/calendar-*.pdf
+                         └─ served at .../wp-content/uploads/calendar-YYYY-MM.pdf
+                              └─ WP snippet #22's "🖨 Print Calendar" button links to the
+                                 month the visitor is viewing (updates on AJAX nav)
 ```
 
-## How the render fits one page (`render.js`)
+## How it renders (`render.js`)
 
-1. Load the live calendar, wait for `.mec-calendar`.
+Renders the **current month plus the next `MONTHS_AHEAD` (default 6)**, each to
+`calendar-YYYY-MM.pdf` (current month also → `calendar.pdf`, a no-JS fallback).
+The live page only serves the current month; other months are fetched by
+**replaying MEC's `mec_monthly_view_load_month` AJAX** (the captured skin `atts`
+with the target `mec_year`/`mec_month`) and injecting the returned grid + title —
+no fragile click-driven navigation. A footer (org name + website) is stamped in
+the bottom page margin via `displayHeaderFooter`.
+
+Each month is fit to one page:
+
+1. Load the calendar; if not the current month, AJAX-fetch + inject the target.
 2. **Isolate** — replace `<body>` with just the `.mec-wrap` calendar element, so
    nothing below the grid (footer/colophon) can bleed into the PDF. Inject CSS to
    reset margins, force white background, hide MEC nav, neutralize the on-screen
@@ -61,10 +75,10 @@ grid (scale ≈ 0.77) — both fill one page with every event readable.
 |---|---|---|
 | `CHROME_PATH` | `/usr/bin/chromium-browser` | Chrome/Chromium binary |
 | `CAL_URL` | the live calendar page | Page to render |
-| `OUT` | `./calendar.pdf` | Output path |
+| `OUT_DIR` | this directory | Where the `calendar-YYYY-MM.pdf` files are written |
+| `MONTHS_AHEAD` | `6` | Months past the current one to render (total = N+1) |
 | `SCALE` | *(unset → auto-fit)* | Force a fixed print scale, skipping auto-fit |
-| `MARGIN_IN` | `0.3` | Page margin (inches) |
-| `DEBUG_EXTRA_ROWS` | `0` | Test hook: clone N week rows to simulate a taller month |
+| `MARGIN_TOP` / `_BOTTOM` / `_SIDE` | `0.3` / `0.45` / `0.3` | Page margins (in); bottom is larger to seat the footer |
 
 ## Deployment (the Jabra box)
 
@@ -78,8 +92,9 @@ own files + scps out.
 - **Browser**: EPEL Chromium (`dnf install chromium`), reversible via
   `dnf remove chromium`.
 - **Node**: system `node` v22 (`/usr/bin/node`), `npm install` for puppeteer-core.
-- **Schedule**: root crontab — `15 6,12,17,22 * * *` (6:15a / 12:15p / 5:15p /
-  10:15p Eastern). The box is on Eastern time, matching the Tampa calendar.
+- **Schedule**: root crontab — `0 * * * *` (hourly, on the hour, Eastern). A full
+  run (current month + 6) renders + uploads in ~40s. The box is on Eastern time,
+  matching the Tampa calendar.
 
 ### Production-safety guard
 
@@ -101,17 +116,24 @@ Bluehost SSH is on **port 2222**. No password is stored anywhere.
 Code Snippets plugin, snippet **#22** "Calendar Print Button (page 8647)"
 (`_4UX_snippets`, scope front-end). Source of truth:
 [`wp/snippet-22-print-button.php`](wp/snippet-22-print-button.php). It appends to
-`the_content` on page 8647:
+`the_content` on page 8647 a button defaulting to the current month's PDF:
 
 ```html
 <a class="gasf-print-calendar-btn" href="/wp-content/uploads/calendar.pdf" target="_blank" rel="noopener">🖨 Print Calendar</a>
 ```
 
+plus a `data-cfasync="false"` script that **points the button at whichever month
+the visitor is viewing**: it reads MEC's selected-month container
+(`.mec-month-container-selected`, id ending `YYYYMM`), sets the href to
+`calendar-YYYY-MM.pdf`, and re-applies via a `MutationObserver` as the visitor
+uses MEC's AJAX month nav. The default link works with no JS; a month outside the
+rendered window would 404 — raise `MONTHS_AHEAD` if that matters.
+
 Styling is unchanged — the existing `.gasf-print-calendar-btn` CSS (in the
 SiteOrigin stylesheet `so-css-hoot-du-premium.css`) already uses
 `display:inline-flex; text-decoration:none` with explicit colors, so the anchor
-renders identically to the old `<button>`. An `<a href>` is used rather than an
-inline `onclick` because Cloudflare Rocket Loader rewrites inline handlers.
+renders identically to the old `<button>`. An `<a href>` (not an inline `onclick`)
+and `data-cfasync="false"` both sidestep Cloudflare Rocket Loader.
 
 ## Operations
 
@@ -122,11 +144,8 @@ bash /opt/gasf-print-calendar/run.sh
 # Watch the log
 tail -n 40 /opt/gasf-print-calendar/render.log
 
-# Render only, to a scratch file (no upload)
-CHROME_PATH=/usr/bin/chromium-browser OUT=/tmp/test.pdf node /opt/gasf-print-calendar/render.js
-
-# Stress-test a 6-week month
-DEBUG_EXTRA_ROWS=1 OUT=/tmp/6wk.pdf node /opt/gasf-print-calendar/render.js
+# Render to a scratch dir without uploading (e.g. current month + 2)
+CHROME_PATH=/usr/bin/chromium-browser MONTHS_AHEAD=2 OUT_DIR=/tmp node /opt/gasf-print-calendar/render.js
 ```
 
 **Tuning the size**: the calendar fills ~92% of the page by default. To leave
