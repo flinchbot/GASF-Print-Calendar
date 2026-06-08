@@ -44,7 +44,10 @@ add_filter( 'the_content', function( $content ) {
     var a=document.querySelector(".gasf-print-calendar-btn");
     if(!a)return;
     var m=ym();
-    a.setAttribute("href","/wp-content/uploads/calendar"+(m?"-"+m:"")+".pdf");
+    // Bluehost serves these PDFs with a 24h cache; bust it hourly (the render
+    // job refreshes hourly) so visitors always get the current PDF.
+    var v=Math.floor(Date.now()/3600000);
+    a.setAttribute("href","/wp-content/uploads/calendar"+(m?"-"+m:"")+".pdf?v="+v);
   }
   function init(){
     apply();
