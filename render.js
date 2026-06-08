@@ -40,7 +40,7 @@ const PRINT_H_PX = PRINT_H_IN * CSS_PX_PER_IN;
 // scale ceiling of 1.0 keeps the layout >= ~998px (desktop grid).
 const SCALE_MIN = 0.35;
 const SCALE_MAX = 1.0;
-const FILL_SAFETY = 0.98; // leave a hair of headroom so we never tip to page 2
+const FILL_SAFETY = 0.95; // headroom so sub-pixel/reflow drift never tips to page 2
 
 const FORCED_SCALE = process.env.SCALE ? parseFloat(process.env.SCALE) : null;
 
@@ -55,6 +55,11 @@ function isolateCalendar() {
   if (cal) document.body.replaceChildren(cal);
 
   const css = `
+    /* Kill the site's print @page margin (0.4in) so ONLY page.pdf()'s margins
+       apply — otherwise the two stack and the real printable area shrinks,
+       making the grid taller than our geometry model and clipping the last
+       week row. With this at 0, page.pdf({margin}) is the single source. */
+    @page { margin: 0; }
     html, body {
       margin: 0 !important; padding: 0 !important; background: #fff !important;
     }
@@ -126,7 +131,7 @@ function isolateCalendar() {
     const heightAtScale = async (scale) => {
       const layoutW = Math.round((PRINT_W_IN * CSS_PX_PER_IN) / scale);
       await page.setViewport({ width: layoutW, height: 100, deviceScaleFactor: 1 });
-      await new Promise((r) => setTimeout(r, 150)); // let it reflow
+      await new Promise((r) => setTimeout(r, 250)); // let it reflow
       return page.evaluate(() => {
         const el = document.body.firstElementChild;
         const h = el
