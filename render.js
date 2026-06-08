@@ -116,6 +116,26 @@ function isolateCalendar() {
     await page.waitForSelector('.mec-calendar', { timeout: 30000 });
     console.log('Found .mec-calendar grid');
 
+    // Optional: advance N months via MEC's AJAX next-month nav. Lets the club
+    // print a future month, and is how we stress-test the 6-week worst case.
+    const monthsForward = parseInt(process.env.MONTHS_FORWARD || '0', 10);
+    for (let i = 0; i < monthsForward; i++) {
+      const before = await page.$eval('.mec-next-month', (el) =>
+        el.getAttribute('data-mec-month')
+      );
+      await page.click('.mec-next-month');
+      await page.waitForFunction(
+        (b) => {
+          const el = document.querySelector('.mec-next-month');
+          return el && el.getAttribute('data-mec-month') !== b;
+        },
+        { timeout: 20000 },
+        before
+      );
+      await new Promise((r) => setTimeout(r, 500)); // settle after AJAX swap
+    }
+    if (monthsForward > 0) console.log('Advanced', monthsForward, 'month(s)');
+
     await page.evaluate(isolateCalendar);
     // Print layout is what the PDF uses; measure under it.
     await page.emulateMediaType('print');
