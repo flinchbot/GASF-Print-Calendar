@@ -1,0 +1,13 @@
+{
+  "name": "gasf-print-calendar",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Render the GASF MEC calendar to a single-page landscape PDF with headless Chrome and upload it to germantampabay.com.",
+  "main": "render.js",
+  "scripts": {
+    "render": "node render.js"
+  },
+  "dependencies": {
+    "puppeteer-core": "^24.10.0"
+  }
+}
