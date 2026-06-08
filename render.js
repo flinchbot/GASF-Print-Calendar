@@ -120,19 +120,26 @@ function isolateCalendar() {
     // print a future month, and is how we stress-test the 6-week worst case.
     const monthsForward = parseInt(process.env.MONTHS_FORWARD || '0', 10);
     for (let i = 0; i < monthsForward; i++) {
-      const before = await page.$eval('.mec-next-month', (el) =>
-        el.getAttribute('data-mec-month')
+      // First day-cell's YYYYMMDD identifies the displayed month; wait for it
+      // to change after the AJAX swap. Trigger via jQuery (MEC binds its
+      // next-month handler with delegated jQuery; Rocket Loader defers the
+      // raw listeners, so a synthetic DOM click is unreliable).
+      const before = await page.$eval('.mec-calendar [data-mec-cell]', (el) =>
+        el.getAttribute('data-mec-cell')
       );
-      await page.click('.mec-next-month');
+      await page.evaluate(() => {
+        if (window.jQuery) window.jQuery('.mec-next-month').first().trigger('click');
+        else document.querySelector('.mec-next-month').click();
+      });
       await page.waitForFunction(
         (b) => {
-          const el = document.querySelector('.mec-next-month');
-          return el && el.getAttribute('data-mec-month') !== b;
+          const el = document.querySelector('.mec-calendar [data-mec-cell]');
+          return el && el.getAttribute('data-mec-cell') !== b;
         },
         { timeout: 20000 },
         before
       );
-      await new Promise((r) => setTimeout(r, 500)); // settle after AJAX swap
+      await new Promise((r) => setTimeout(r, 600)); // settle after AJAX swap
     }
     if (monthsForward > 0) console.log('Advanced', monthsForward, 'month(s)');
 
