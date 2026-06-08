@@ -116,34 +116,21 @@ function isolateCalendar() {
     await page.waitForSelector('.mec-calendar', { timeout: 30000 });
     console.log('Found .mec-calendar grid');
 
-    // Optional: advance N months via MEC's AJAX next-month nav. Lets the club
-    // print a future month, and is how we stress-test the 6-week worst case.
-    const monthsForward = parseInt(process.env.MONTHS_FORWARD || '0', 10);
-    for (let i = 0; i < monthsForward; i++) {
-      // First day-cell's YYYYMMDD identifies the displayed month; wait for it
-      // to change after the AJAX swap. Trigger via jQuery (MEC binds its
-      // next-month handler with delegated jQuery; Rocket Loader defers the
-      // raw listeners, so a synthetic DOM click is unreliable).
-      const before = await page.$eval('.mec-calendar [data-mec-cell]', (el) =>
-        el.getAttribute('data-mec-cell')
-      );
-      await page.evaluate(() => {
-        if (window.jQuery) window.jQuery('.mec-next-month').first().trigger('click');
-        else document.querySelector('.mec-next-month').click();
-      });
-      await page.waitForFunction(
-        (b) => {
-          const el = document.querySelector('.mec-calendar [data-mec-cell]');
-          return el && el.getAttribute('data-mec-cell') !== b;
-        },
-        { timeout: 20000 },
-        before
-      );
-      await new Promise((r) => setTimeout(r, 600)); // settle after AJAX swap
-    }
-    if (monthsForward > 0) console.log('Advanced', monthsForward, 'month(s)');
-
     await page.evaluate(isolateCalendar);
+
+    // Test hook: clone the last week row N times to simulate a taller month
+    // (e.g. a 6-week grid) so we can confirm auto-fit still lands on one page.
+    // Inert unless DEBUG_EXTRA_ROWS is set; never used by the scheduled render.
+    const extraRows = parseInt(process.env.DEBUG_EXTRA_ROWS || '0', 10);
+    if (extraRows > 0) {
+      await page.evaluate((n) => {
+        const rows = document.querySelectorAll('.mec-calendar-row');
+        if (!rows.length) return;
+        const last = rows[rows.length - 1];
+        for (let i = 0; i < n; i++) last.parentNode.appendChild(last.cloneNode(true));
+      }, extraRows);
+      console.log('DEBUG: appended', extraRows, 'extra week row(s)');
+    }
     // Print layout is what the PDF uses; measure under it.
     await page.emulateMediaType('print');
     try {
