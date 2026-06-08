@@ -119,17 +119,21 @@ function isolateCalendar() {
     } catch (_) {}
 
     // Measure the calendar's natural height at a given print layout width.
+    // Measure the isolated calendar ELEMENT (body's only child), not
+    // documentElement.scrollHeight — the latter is clamped up to the viewport
+    // height and would over-report for a short calendar. Tiny viewport height
+    // keeps anything from inflating the number.
     const heightAtScale = async (scale) => {
       const layoutW = Math.round((PRINT_W_IN * CSS_PX_PER_IN) / scale);
-      await page.setViewport({ width: layoutW, height: 1200, deviceScaleFactor: 1 });
+      await page.setViewport({ width: layoutW, height: 100, deviceScaleFactor: 1 });
       await new Promise((r) => setTimeout(r, 150)); // let it reflow
-      return page.evaluate(() =>
-        Math.max(
-          document.body.scrollHeight,
-          document.documentElement.scrollHeight,
-          Math.ceil(document.body.getBoundingClientRect().height)
-        )
-      );
+      return page.evaluate(() => {
+        const el = document.body.firstElementChild;
+        const h = el
+          ? el.getBoundingClientRect().height
+          : document.body.getBoundingClientRect().height;
+        return Math.ceil(h);
+      });
     };
 
     let scale = FORCED_SCALE;
