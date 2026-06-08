@@ -1,0 +1,4 @@
+# These run on Linux (Jabra box). Force LF so a Windows checkout/edit can never
+# introduce CRLF that would break the shell shebang or the Node scripts.
+*.sh  text eol=lf
+*.js  text eol=lf
