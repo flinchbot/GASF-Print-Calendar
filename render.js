@@ -53,11 +53,11 @@ const SCALE_MIN = 0.35;
 const SCALE_MAX = 1.0; // keep layout >= ~998px so MEC never drops to mobile list
 const FILL_SAFETY = 0.95;
 
-// Footer printed in the bottom margin of every page. Gold (#EF9F27) matches the
+// Footer printed in the bottom margin of every page. Gold (#ef9e26) to match the
 // MEC month heading; larger + bold so it stands out on the printed sheet.
 const FOOTER = `
   <div style="font-size:14px; width:100%; box-sizing:border-box; padding:0 0.45in;
-              color:#EF9F27; font-family:Arial,Helvetica,sans-serif; font-weight:bold;
+              color:#ef9e26; font-family:Arial,Helvetica,sans-serif; font-weight:bold;
               display:flex; justify-content:space-between; align-items:center;">
     <span style="letter-spacing:.4px;">German-American Society</span>
     <span>germantampabay.com</span>
